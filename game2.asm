@@ -20,7 +20,15 @@
 .eqv 	orangered	0xff800000 #eye
 .eqv	sienna		0xffffe4e1 #eyebrow
 .eqv	maroon		0xffffb6c1 #face
-
+#nut color
+.eqv	brown		0xffa52a2a
+.eqv 	burlywood	0xffdeb887
+#carrot color
+.eqv 	forestgreen	0xff228822
+.eqv 	limegreen	0xff32cd32
+.eqv 	lime		0xff00ff00
+.eqv	tomato		0xffff6347
+.eqv	darkorange	0xffff8c00
 
 
 .eqv 	obstacleNum	4
@@ -34,6 +42,9 @@ platLen:	.word	15,  20,  23 , 24
 platX:		.word	50, 25, 40, 29
 platYhead:	.word	20,  40, 0, 60	
 platYtail:	.word 	34,  59, 22, 83
+platElement	.word	-1,  -1,  1,  0
+elementPosition	.word	-1,  -1,  15, 65
+
 bulletX:	.word	64, 64, 64, 64
 bulletY:	.space	16
 bulletSpeed:	.space	16
@@ -42,6 +53,7 @@ enemy:		.word   1, 1  	# first one represent y coordinate (1-59 inclusive), seco
 
 smashed:		.asciiz "you are smashed\n"
 shoot:		.asciiz "you are shoot\n"
+explode:	.asciiz "you explode\n"
 .text
 # $t8=top right row of the hamster
 # $t9=top right column of the hamster
@@ -50,7 +62,7 @@ shoot:		.asciiz "you are shoot\n"
 # $s2=check if is successful jump, 1 if successful
 setup:
 	#draw background
-	li $s0, 100
+	li $s0, 25
 	li $s1, 0
 	li $s2, 0			# $s0=1000=initial sleep time
 	li 	$t0, base_address	# $t0=the base address for display
@@ -82,10 +94,10 @@ gameloop:
 	jal move_enemy
 	jal bullet
 	jal check_collision
+	jal check_enemy
+	jal check_hit_enemy
 	jal move_platform	# move platform
-	# if jumped half times, then need to continue jumping no matter what user input
-	andi $t0, $s1, 1
-	beq $t0, 1, w_2
+	
 	# get input from user
 	# check if user has input something
 	li $t0, 0xffff0000 	# $t0=address of 0xffff0000 
@@ -117,7 +129,7 @@ keypress_happened:
 a_2:
 	li $s2, 0	# let $s2 to be not successful
 	# if $t9<3, can not move left twice, branch to a_1
-	ble $t9, 3, w_1
+	ble $t9, 3, a_1
 	# if there are green platforms 2 unit on the left, cannot move 2 unit left, branch to a_1
 	# by checking the color of tail of platform+4
 	# $t0=iteration
@@ -139,7 +151,7 @@ a_2_check:lw $t3, 0($t1)
 	add $t5, $t4, $t5
 	addi $t5, $t5, base_address
 	lw $t6, 8($t5)
-	beq $t6, black, w_1
+	beq $t6, black, a_1
 	# check the next platform tail
 	addi $t0, $t0, 1
 	addi $t1, $t1, 4
@@ -299,6 +311,8 @@ w_2:	# check if can jump
 	# $t7=platYhead[$t0]
 	# $s3=address of pixel below the platformhead and $t1*4 to the right
 	# $s4=color of pixel below platform
+	# $s5=left boundary
+	# $s6=right boundary
 	li $t0, 0
 	la $t2, platLen
 	la $t3, platX
@@ -315,7 +329,15 @@ outer_loop_w2:
 	add $s3, $t7, $s3
 	addi $s3, $s3, base_address
 	addi $s3, $s3, 512
+	sll $s5, $t6, 8
+	addi $s5, $s5, base_address
+	addi $s5, $s5, 512
+	addi $s6, $s5, 252
 inner_loop_w2:	
+	# if base_address+$t6*256<=$s3<=base_address+$t6*256+63*4, should check
+	# otherwise, increment $t1 and do inner loop
+	blt $s3, $s5, next_inner_loop_w2
+	bgt $s3, $s6, next_inner_loop_w2
 	lw $s4, 0($s3)
 	# if 2 units below is hamster color, branch to w_1
 	beq $s4, black, w_1
@@ -325,6 +347,7 @@ inner_loop_w2:
 	beq $s4, tan, w_1
 	
 	# else, increment $t1 and do inner loop
+next_inner_loop_w2:
 	addi $t1, $t1, 1
 	addi $s3, $s3, 4
 	bne $t1, $t5, inner_loop_w2 
@@ -342,8 +365,16 @@ inner_loop_w2:
 	jal draw_hamster
 	addi $s1, $s1, 1	# increment $s1 number of jumps by 1
 	li $s2, 1		# jump is successful, so $s2=1
-	
+	# if jumped half times, then need to continue jumping no matter what user input
+	andi $t0, $s1, 1
+	beq $t0, 1, continue_jump2
 	j sleep
+continue_jump2:
+	addi $v0, $zero, 32		# syscall sleep
+	add $a0, $zero, 2
+	syscall
+	j w_2
+	
 						
 w_1:	# check if can move up 1 unit
 	blt $t8, 11, no_jump		# if $t8<11, cannot move up, branch to no_jump
@@ -379,7 +410,15 @@ outer_loop_w1:
 	add $s3, $t7, $s3
 	addi $s3, $s3, base_address
 	addi $s3, $s3, 256
+	sll $s5, $t6, 8
+	addi $s5, $s5, base_address
+	addi $s5, $s5, 256
+	addi $s6, $s5, 252
 inner_loop_w1:	
+	# if base_address+$t6*256<=$s3<=base_address+$t6*256+63*4, should check
+	# otherwise, increment $t1 and do inner loop
+	blt $s3, $s5, next_inner_loop_w1
+	bgt $s3, $s6, next_inner_loop_w1
 	lw $s4, 0($s3)
 	# if 1 unit below is hamster color, branch to no_jump
 	beq $s4, black, no_jump
@@ -388,6 +427,7 @@ inner_loop_w1:
 	beq $s4, moccasin, no_jump
 	beq $s4, tan, no_jump
 	# else, increment $t1 and do inner loop
+next_inner_loop_w1:
 	addi $t1, $t1, 1
 	addi $s3, $s3, 4
 	bne $t1, $t5, inner_loop_w1
@@ -405,7 +445,16 @@ inner_loop_w1:
 	jal draw_hamster
 	addi $s1, $s1, 1 	# increment $s1 number of jumps by 1
 	li $s2, 1		# jump is successful, so $s2=1
+	# if jumped half times, then need to continue jumping no matter what user input
+	andi $t0, $s1, 1
+	beq $t0, 1, continue_jump1
 	j sleep
+continue_jump1:
+	addi $v0, $zero, 32		# syscall sleep
+	add $a0, $zero, 2
+	syscall
+	j w_2
+	
 	
 no_jump:
 	addi $s1, $s1, 1	# increment $s1 number of jumps by 1
@@ -413,9 +462,9 @@ no_jump:
 	j sleep
 
 gravity_hamster:
-	#If hamster is jumping, i.e. 1<=$s1<4, and $s2=1, no gravity for hamster
+	#If hamster is jumping, i.e. 1<=$s1<=4, and $s2=1, no gravity for hamster
 	blt $s1, 1, do_gravity_hamster
-	bge $s1, 4, do_gravity_hamster
+	bgt $s1, 4, do_gravity_hamster
 	bne $s2, 1, do_gravity_hamster
 	jr $ra
 	
@@ -823,7 +872,7 @@ draw_jetplane:
 	jr $ra
 	
 draw_platform:
-	addi $sp, $sp, -44
+	addi $sp, $sp, -56
 	sw $t0, 0($sp)
 	sw $t1, 4($sp)
 	sw $t2, 8($sp)
@@ -834,7 +883,10 @@ draw_platform:
 	sw $t7, 28($sp)
 	sw $s3, 32($sp)
 	sw $s4, 36($sp)
-	sw $ra, 40($sp)
+	sw $s5, 40($sp)
+	sw $s6, 44($sp)
+	sw $a0, 48($sp)
+	sw $ra, 52($sp)
 	
 	#$t0=base_address
 	#$t1=green
@@ -846,15 +898,30 @@ draw_platform:
 	#$t7=platYhead[$t2], then iterate until $t7=$t8
 	#$s3=platYtail[$t2]
 	#$s4=address of the array coordinate
+	#$s5=address of platElement
+	#$s6=platElement[$t2]
 	li $t0, base_address 	# $t0=the base address for display
 	add $t1, $zero, $a0		# $t1=color of character
 	li $t2, 0		# $t2 is iteration number
 	la $t3, platX		# $t3=address of platX array
 	la $t4, platYhead		# $t4=address of platYhead array
 	la $t5, platYtail	# $t5=address of platYtail array
+	la $s5, platElement	# $s5=address pf platElement
 	#convert (x,y) to position in display and store in $t9
 	#s3=x*256, $s4=y*4, $s4=$s3+$s4+base_address
-loopPlatXY:	lw $t6, 0($t3)		# $t6=platX[$t2]
+loopPlatXY:	
+	lw $s6, 0($s5)
+	beq $s6, 0, d_nut
+	beq $s6, 1, d_carrot
+	j finished_draw_element
+d_nut:	add $a0, $a0, $t2
+	jal draw_nut
+	j finished_draw_element
+d_carrot:add $a0, $a0, $t2
+	jal draw_carrot
+	j finished_draw_element
+finished_draw_element:	
+	lw $t6, 0($t3)		# $t6=platX[$t2]
 	lw $t7, 0($t4)		# $t7=platYhead[$t2]
 	lw $s3, 0($t5)		# $s3=platYtail[$t2]
 	#if $t7<0 || $t7>63, dont draw, $t7++
@@ -874,10 +941,10 @@ loopPlatY:	blt $t7, 0, nextPlat
 	ble $t7, $s3, loopPlatY
 	# outer loop
 nextPlat:	addi $t2, $t2, 1	# iteration ++
-	addi $t3, $t3, 4	# update memory address of element in manX
-	addi $t4, $t4, 4	# update memory address of element in manYhead
-	addi $t5, $t5, 4	# update memory address of element in manYtail
-	
+	addi $t3, $t3, 4	# update memory address of element in platX
+	addi $t4, $t4, 4	# update memory address of element in platYhead
+	addi $t5, $t5, 4	# update memory address of element in platYtail
+	addi $s5, $s5, 4	# update memory address of element in platElement
 	blt $t2,platNum, loopPlatXY
 	
 	#restore registers
@@ -891,8 +958,11 @@ nextPlat:	addi $t2, $t2, 1	# iteration ++
 	lw $t7, 28($sp)
 	lw $s3, 32($sp)
 	lw $s4, 36($sp)
-	lw $ra, 40($sp)
-	addi $sp, $sp, 44
+	lw $s5, 40($sp)
+	lw $s6, 44($sp)
+	lw $a0, 48($sp)
+	lw $ra, 52($sp)
+	addi $sp, $sp, 56
 	jr $ra
 
 erase_hamster:
@@ -1057,6 +1127,7 @@ move_platform:
 	#$s2=skyblue
 	#$s3=green
 	#$s4=color at the new head of the platform
+	#
 	li $s2,skyblue		# $s2=skyblue
 	li $s3, green		# $s3=green
 	li $t0,0		# $t0=iteration
@@ -1112,6 +1183,12 @@ return_fake_a:
 	jal draw_platform
 	#sw $s3, 0($s6)		# paint to green
 next_platform:
+	# deal with element
+	
+	
+	
+
+	
 	addi $t0, $t0, 1	# iteration ++
 	addi $t1, $t1, 4	# update memory address of element in platLen
 	addi $t2, $t2, 4	# update memory address of element in platX
@@ -1599,6 +1676,8 @@ erase_enemy:
 	sw $t4, 268($t3)
 	sw $t4, 272($t3)
 	sw $t4, 764($t3)
+	sw $t4, 768($t3)
+	sw $t4, 780($t3)
 	sw $t4, 772($t3)
 	sw $t4, 776($t3)
 	sw $t4, 784($t3)
@@ -1620,8 +1699,9 @@ erase_enemy:
 	sw $t4, 1288($t3)
 	sw $t4, 508($t3)
 	sw $t4, 520($t3)
-	sw $t4, 516($t3)
-	sw $t4, 528($t3)	
+	
+	sw $t4, 512($t3)
+	sw $t4, 524($t3)	
 	lw $t0, 0($sp)
 	lw $t1, 4($sp)
 	lw $t2, 8($sp)
@@ -1633,39 +1713,46 @@ erase_enemy:
 	jr $ra			
 				
 move_enemy:
-	addi $sp, $sp, -28
+	addi $sp, $sp, -32
 	sw $t0, 0($sp)
 	sw $t1, 4($sp)
 	sw $t2, 8($sp)
 	sw $t3, 12($sp)
 	sw $t4, 16($sp)
-	sw $a0, 20($sp)
-	sw $ra, 24($sp)
+	sw $t5, 20($sp)
+	sw $a0, 24($sp)
+	sw $ra, 28($sp)
 	# $t0=address of enemy
 	# $t1=y coordinate=enemy[0]
 	# $t2=right or left=enemy[1]
+	# $t5=random number
 	la $t0, enemy
 	lw $t1, 0($t0)
 	lw $t2, 4($t0)
+	beq $t1, -1, new_enemy
 	jal erase_enemy
+	li $v0, 42
+	li $a1, 3
+	syscall
+	addi $t5, $a0,1 # generate random speed from 1-3(inclusive)
 	#decide whether go left or go right
-	#if y=1, left, keep y, change to right, change eyebrow
-	#if y=1, right, erase, y+1, draw
-	#if y=59, left, erase, y-1, draw
-	#if y=59, right, keep y, change to left, change eyebrow
-	#else, left, y-1, right, y+1
-	beq $t1, 1, left_most_enemy
-	beq $t1, 59, right_most_enemy
+	#if y<=3, left, keep y, change to right, change eyebrow
+	#if y<=3, right, erase, y+RV, draw
+	#if y>=57, left, erase, y-RV, draw
+	#if y>=57, right, keep y, change to left, change eyebrow
+	#else, left, y-RV, right, y+RV
+	ble $t1, 3, left_most_enemy
+	bge $t1, 57, right_most_enemy
 	#we are here, so 1<y<59
 	beq $t2, 1, middle_right
 	#we are here, so move left	
 middle_left:
-	addi $t1, $t1, -1
+	sub $t1, $t1, $t5
 	sw $t1, 0($t0)
 	jal draw_enemy
 	j restore_move_enemy
 middle_right:
-	addi $t1, $t1, 1
+	add $t1, $t1, $t5
 	sw $t1, 0($t0)
 	jal draw_enemy
 	j restore_move_enemy
@@ -1685,20 +1772,511 @@ right_change_left_enemy:
 	sw $t2, 4($t0)
 	jal draw_enemy
 	j restore_move_enemy
+new_enemy:
+	li $v0, 42
+	li $a1, 50
+	syscall
+	bne $a0, 0, restore_move_enemy	# if $a0!=0, do not create the enemy
+	li $v0, 42
+	li $a1, 53
+	syscall
+	addi $t5, $a0, 4	# 4<=$t5<=56
+	sw $t5, 0($t0)
+	li $v0, 42
+	li $a1, 2
+	syscall
+	sw $a0, 4($t0)
+	jal draw_enemy
 restore_move_enemy:	
 	lw $t0, 0($sp)
 	lw $t1, 4($sp)
 	lw $t2, 8($sp)
 	lw $t3, 12($sp)
 	lw $t4, 16($sp)
-	lw $a0, 20($sp)
-	lw $ra, 24($sp)
-	addi $sp, $sp, 28
+	lw $t5, 20($sp)
+	lw $a0, 24($sp)
+	lw $ra, 28($sp)
+	addi $sp, $sp, 32
 	jr $ra		
 		
 																
-							
-												
+check_enemy:
+	addi $sp, $sp, -64
+	sw $t0, 0($sp)
+	sw $t1, 4($sp)
+	sw $t2, 8($sp)
+	sw $t3, 12($sp)
+	sw $t4, 16($sp)
+	sw $t5, 20($sp)
+	sw $t6, 24($sp)
+	sw $t7, 28($sp)
+	sw $s5, 32($sp)
+	sw $s6, 36($sp)
+	sw $s7, 40($sp)
+	sw $s2, 44($sp)
+	sw $s3, 48($sp)
+	sw $s4, 52($sp)
+	sw $a0, 56($sp)
+	sw $ra, 60($sp)	
+	#$t0=adress of enemy
+	#$t1=enemy[0]
+	#$t2=enemy[1]
+	#$t3=address in frame
+	#$t4=color
+	la $t0, enemy
+	lw $t1, 0($t0)
+	lw $t2, 4($t0)
+	sll $t3, $t1, 2
+	addi $t3, $t3, 14848
+	addi $t3, $t3, base_address
+	# if enemy is moving right, check right side
+	beq $t2, 0, check_left_side_enemy
+check_right_side_enemy:
+	lw $t4, 252($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 508($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 764($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1020($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1276($t3)
+	beq $t4, black, dead_by_enemy
+	beq $t1, 59, restore_check_enemy
+	
+	lw $t4, 20($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 276($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 532($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 788($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1044($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1300($t3)
+	beq $t4, black, dead_by_enemy
+check_left_side_enemy:
+	lw $t4, 272($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 528($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 784($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1040($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1296($t3)
+	beq $t4, black, dead_by_enemy
+	beq $t1, 1, restore_check_enemy
+	
+	addi $t3, $t3, -8
+	lw $t4, 0($t3)
+	beq $t4, black, dead_by_enemy
+	addi $t3, $t3, 8
+	lw $t4, 248($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 504($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 760($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1016($t3)
+	beq $t4, black, dead_by_enemy
+	lw $t4, 1272($t3)
+	beq $t4, black, dead_by_enemy
+																																								
+restore_check_enemy:																																																													
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+	lw $t4, 16($sp)
+	lw $t5, 20($sp)
+	lw $t6, 24($sp)
+	lw $t7, 28($sp)
+	lw $s5, 32($sp)
+	lw $s6, 36($sp)
+	lw $s7, 40($sp)
+	lw $s2, 44($sp)
+	lw $s3, 48($sp)
+	lw $s4, 52($sp)
+	lw $a0, 56($sp)
+	lw $ra, 60($sp)
+	addi $sp, $sp, 64
+	jr $ra
+	
+check_hit_enemy:
+	addi $sp, $sp, -64
+	sw $t0, 0($sp)
+	sw $t1, 4($sp)
+	sw $t2, 8($sp)
+	sw $t3, 12($sp)
+	sw $t4, 16($sp)
+	sw $t5, 20($sp)
+	sw $t6, 24($sp)
+	sw $t7, 28($sp)
+	sw $s5, 32($sp)
+	sw $s6, 36($sp)
+	sw $s7, 40($sp)
+	sw $s2, 44($sp)
+	sw $s3, 48($sp)
+	sw $s4, 52($sp)
+	sw $a0, 56($sp)
+	sw $ra, 60($sp)	
+	# $t0=address of hamster base
+	# $t1=color
+	sll $t0, $t8, 8
+	add $t0, $t9, $t0
+	add $t0, $t9, $t0
+	add $t0, $t9, $t0
+	add $t0, $t9, $t0
+	addi $t0, $t0, base_address
+	lw $t1, 3328($t0)
+	beq $t1, yellow, kill_enemy
+	beq $t1, orange, kill_enemy
+	lw $t1, 3332($t0)
+	beq $t1, yellow, kill_enemy
+	beq $t1, orange, kill_enemy
+	lw $t1, 3336($t0)
+	beq $t1, yellow, kill_enemy
+	beq $t1, orange, kill_enemy
+	lw $t1, 3340($t0)
+	beq $t1, yellow, kill_enemy
+	beq $t1, orange, kill_enemy
+	lw $t1, 3344($t0)
+	beq $t1, yellow, kill_enemy
+	beq $t1, orange, kill_enemy
+	lw $t1, 3348($t0)
+	beq $t1, yellow, kill_enemy
+	beq $t1, orange, kill_enemy
+	lw $t1, 3352($t0)
+	beq $t1, yellow, kill_enemy
+	beq $t1, orange, kill_enemy
+	j restore_check_hit_enemy
+kill_enemy:
+	# $t0=address of enemy
+	# $t1=-1
+	jal erase_enemy
+	la $t0, enemy
+	li $t1, -1
+	sw $t1, 0($t0)
+	
+restore_check_hit_enemy:
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+	lw $t4, 16($sp)
+	lw $t5, 20($sp)
+	lw $t6, 24($sp)
+	lw $t7, 28($sp)
+	lw $s5, 32($sp)
+	lw $s6, 36($sp)
+	lw $s7, 40($sp)
+	lw $s2, 44($sp)
+	lw $s3, 48($sp)
+	lw $s4, 52($sp)
+	lw $a0, 56($sp)
+	lw $ra, 60($sp)
+	addi $sp, $sp, 64
+	jr $ra
+
+draw_nut:
+	addi $sp, $sp, -28
+	sw $t0, 0($sp)
+	sw $t1, 4($sp)
+	sw $t2, 8($sp)
+	sw $t3, 12($sp)
+	sw $t4, 16($sp)
+	sw $t5, 20($sp)
+	sw $ra, 24($sp)
+	# $a0=index of platform*4
+	# $t0=address of platX[$a0]
+	# $t1=address of elementPosition[$a0]
+	# $t2=platX[$a0]-6, x position of nut
+	# $t3=elementPosition[$a0]
+	# $t4=address in frame
+	# $t5=color
+	sll $a0, $a0, 2
+	la $t0, platX
+	la $t1, elementPosition
+	add $t0, $t0, $a0
+	add $t1, $t1, $a0
+	lw $t2, 0($t0)
+	addi $t2, $t2, -6
+	lw $t3, 0($t1)
+	# if $t3<2 or $t3>61, no drawing
+	blt $t3, 2, restore_draw_nut
+	bgt $t3, 61, restore_draw_nut
+	
+	sll $t4, $t2, 8
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	addi $t4, $t4, base_address
+	li $t5, brown
+	sw $t5, 0($t4)
+	#1
+	sw $t5, 248($t4)
+	sw $t5, 252($t4)
+	sw $t5, 256($t4)
+	sw $t5, 260($t4)
+	sw $t5, 264($t4)
+	#2
+	sw $t5, 504($t4)
+	sw $t5, 520($t4)
+	li $t5, burlywood
+	#2
+	sw $t5, 508($t4)
+	sw $t5, 512($t4)
+	sw $t5, 516($t4)
+	#3
+	sw $t5, 760($t4)
+	sw $t5, 764($t4)
+	sw $t5, 768($t4)
+	sw $t5, 772($t4)
+	sw $t5, 776($t4)
+	#4
+	sw $t5, 1020($t4)
+	sw $t5, 1024($t4)
+	sw $t5, 1028($t4)
+	#5
+	sw $t5, 1280($t4)
+restore_draw_nut:	
+	# restore registers 
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+	lw $t4, 16($sp)
+	lw $t5, 20($sp)
+	lw $ra, 24($sp)
+	addi $sp, $sp, 28
+	jr $ra
+
+erase_nut:
+	addi $sp, $sp, -28
+	sw $t0, 0($sp)
+	sw $t1, 4($sp)
+	sw $t2, 8($sp)
+	sw $t3, 12($sp)
+	sw $t4, 16($sp)
+	sw $t5, 20($sp)
+	sw $ra, 24($sp)
+	# $a0=index of platform*4
+	# $t0=address of platX[$a0]
+	# $t1=address of elementPosition[$a0]
+	# $t2=platX[$a0]-6, x position of nut
+	# $t3=elementPosition[$a0]
+	# $t4=address in frame
+	# $t5=color
+	sll $a0, $a0, 2
+	la $t0, platX
+	la $t1, elementPosition
+	add $t0, $t0, $a0
+	add $t1, $t1, $a0
+	lw $t2, 0($t0)
+	addi $t2, $t2, -6
+	lw $t3, 0($t1)
+	# if $t3<2 or $t3>61, no drawing
+	blt $t3, 2, restore_erase_nut
+	bgt $t3, 61, restore_erase_nut
+	
+	sll $t4, $t2, 8
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	addi $t4, $t4, base_address
+	li $t5, skyblue
+	sw $t5, 0($t4)
+	#1
+	sw $t5, 248($t4)
+	sw $t5, 252($t4)
+	sw $t5, 256($t4)
+	sw $t5, 260($t4)
+	sw $t5, 264($t4)
+	#2
+	sw $t5, 504($t4)
+	sw $t5, 520($t4)
+	
+	#2
+	sw $t5, 508($t4)
+	sw $t5, 512($t4)
+	sw $t5, 516($t4)
+	#3
+	sw $t5, 760($t4)
+	sw $t5, 764($t4)
+	sw $t5, 768($t4)
+	sw $t5, 772($t4)
+	sw $t5, 776($t4)
+	#4
+	sw $t5, 1020($t4)
+	sw $t5, 1024($t4)
+	sw $t5, 1028($t4)
+	#5
+	sw $t5, 1280($t4)
+restore_erase_nut:	
+	# restore registers 
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+	lw $t4, 16($sp)
+	lw $t5, 20($sp)
+	lw $ra, 24($sp)
+	addi $sp, $sp, 28
+	jr $ra
+
+draw_carrot:
+	addi $sp, $sp, -28
+	sw $t0, 0($sp)
+	sw $t1, 4($sp)
+	sw $t2, 8($sp)
+	sw $t3, 12($sp)
+	sw $t4, 16($sp)
+	sw $t5, 20($sp)
+	sw $ra, 24($sp)
+	#restore registers
+	# $a0=index of platform*4
+	# $t0=address of platX[$a0]
+	# $t1=address of elementPosition[$a0]
+	# $t2=platX[$a0]-7, x position of carrot
+	# $t3=elementPosition[$a0]
+	# $t4=address in frame
+	# $t5=color
+	sll $a0, $a0, 2
+	la $t0, platX
+	la $t1, elementPosition
+	add $t0, $t0, $a0
+	add $t1, $t1, $a0
+	lw $t2, 0($t0)
+	addi $t2, $t2, -7
+	lw $t3, 0($t1)
+	# if $t3<5 or $t3>61, no drawing
+	blt $t3, 5, restore_draw_carrot
+	bgt $t3, 61, restore_draw_carrot
+	
+	sll $t4, $t2, 8
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	addi $t4, $t4, base_address
+	li $t5, lime
+	sw $t5, 0($t4)
+	sw $t5, 256($t4)
+	li $t5, limegreen
+	sw $t5, 260($t4)
+	li $t5, forestgreen
+	sw $t5, 512($t4)
+	sw $t5, 516($t4)
+	sw $t5, 520($t4)
+	li $t5, orange
+	sw $t5, 504($t4)
+	sw $t5, 508($t4)
+	sw $t5, 756($t4)
+	sw $t5, 1008($t4)
+	sw $t5, 1260($t4)
+	li $t5, darkorange
+	sw $t5, 760($t4)
+	sw $t5, 764($t4)
+	sw $t5, 1012($t4)
+	sw $t5, 1016($t4)
+	sw $t5, 1264($t4)
+	li $t5, tomato
+	sw $t5, 768($t4)
+	sw $t5, 1020($t4)
+	sw $t5, 1024($t4)
+	sw $t5, 1268($t4)
+	sw $t5, 1272($t4)
+	sw $t5, 1516($t4)
+	sw $t5, 1520($t4)
+restore_draw_carrot:	
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+	lw $t4, 16($sp)
+	lw $t5, 20($sp)
+	lw $ra, 24($sp)
+	addi $sp, $sp, 28
+	jr $ra	
+	
+draw_carrot:
+	addi $sp, $sp, -28
+	sw $t0, 0($sp)
+	sw $t1, 4($sp)
+	sw $t2, 8($sp)
+	sw $t3, 12($sp)
+	sw $t4, 16($sp)
+	sw $t5, 20($sp)
+	sw $ra, 24($sp)
+	#restore registers
+	# $a0=index of platform*4
+	# $t0=address of platX[$a0]
+	# $t1=address of elementPosition[$a0]
+	# $t2=platX[$a0]-7, x position of carrot
+	# $t3=elementPosition[$a0]
+	# $t4=address in frame
+	# $t5=color
+	sll $a0, $a0, 2
+	la $t0, platX
+	la $t1, elementPosition
+	add $t0, $t0, $a0
+	add $t1, $t1, $a0
+	lw $t2, 0($t0)
+	addi $t2, $t2, -7
+	lw $t3, 0($t1)
+	# if $t3<5 or $t3>61, no drawing
+	blt $t3, 5, restore_erase_carrot
+	bgt $t3, 61, restore_erase_carrot
+	
+	sll $t4, $t2, 8
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	add $t4, $t4, $t3
+	addi $t4, $t4, base_address
+	li $t5, skyblue
+	sw $t5, 0($t4)
+	sw $t5, 256($t4)
+	sw $t5, 260($t4)
+
+	sw $t5, 512($t4)
+	sw $t5, 516($t4)
+	sw $t5, 520($t4)
+
+	sw $t5, 504($t4)
+	sw $t5, 508($t4)
+	sw $t5, 756($t4)
+	sw $t5, 1008($t4)
+	sw $t5, 1260($t4)
+
+	sw $t5, 760($t4)
+	sw $t5, 764($t4)
+	sw $t5, 1012($t4)
+	sw $t5, 1016($t4)
+	sw $t5, 1264($t4)
+
+	sw $t5, 768($t4)
+	sw $t5, 1020($t4)
+	sw $t5, 1024($t4)
+	sw $t5, 1268($t4)
+	sw $t5, 1272($t4)
+	sw $t5, 1516($t4)
+	sw $t5, 1520($t4)
+restore_erase_carrot:	
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+	lw $t4, 16($sp)
+	lw $t5, 20($sp)
+	lw $ra, 24($sp)
+	addi $sp, $sp, 28
+	jr $ra	
+																																															
 collision:																																																			
 	li $v0, 4	# print "you are shoot\n"
 	la $a0, shoot
@@ -1711,7 +2289,11 @@ smash:	li $s3, red
 	la $a0, smashed
 	syscall
 	j END_PROGRAM
-	
+dead_by_enemy:
+	li $v0, 4	# print "you explode\n"
+	la $a0, explode
+	syscall
+	j END_PROGRAM
 END_PROGRAM:
 	li $v0, 10 # terminate the program gracefully
 	syscall
