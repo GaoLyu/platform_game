@@ -24,16 +24,15 @@
 # 4. Moving objects
 # 5. Moving platforms
 # 6. Shoot enemies
-# 7. Enemies shoot back
-# 8. Double jump
-# 9. Start menu
+# 7. Double jump
+# 8. Start menu
 #
 # Link to video demonstration for final submission:
-# - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
+# - https://utoronto.zoom.us/rec/share/ovNOjhJBsZwkgXWJNoDIWEDGsz5nbtGcvWZUWjfncyj72h4yoGfbpQsS5APwvKuP.Jt2lnSgIR8uiNcxY
 #
 # Are you OK with us sharing the video with people outside course staff?
 # - yes, and please share this project github link as well!
-#
+# - https://github.com/GaoLyu/platform_game
 # Any additional information that the TA needs to know:
 # - I have 2 pick-up effetcs: nuts help to restore health, and
 #   carrots enable the hamster to jump when it has already jumped twice
@@ -1400,6 +1399,10 @@ draw_bground:	sw   	$t2, 0($t0)		# paint the selected screen to ground color
 	li $t8,51
 	li $t9,55
 	jal draw_hamster
+	la $t0,enemy
+	li $t1, 1
+	sw $t1, 0($t0)
+	sw $t1,4($t0)
 	jal draw_enemy
 	li $fp,0
 	#draw bullet
@@ -2970,7 +2973,7 @@ next_bullet:
 new_bullet:
 	# 33% chance to generate new bullet
 	li $v0, 42		
-	li $a1, 3
+	li $a1, 10
 	syscall
 	# if $a0=0 or 1, next_bullet
 	# if $a0=2, generate new bullet
@@ -8665,25 +8668,25 @@ draw_lower_digit_nut:
 	beq $t0, 8, draw8_0
 	beq $t0, 9, draw9_0
 	j restore_draw_nut_num
-draw0_0:	jal draw_0
+draw0_0:jal draw_0
 	j restore_draw_nut_num
-draw1_0:	jal draw_1
+draw1_0:jal draw_1
 	j restore_draw_nut_num
-draw2_0:	jal draw_2
+draw2_0:jal draw_2
 	j restore_draw_nut_num
-draw3_0:	jal draw_3
+draw3_0:jal draw_3
 	j restore_draw_nut_num
-draw4_0:	jal draw_4
+draw4_0:jal draw_4
 	j restore_draw_nut_num
-draw5_0:	jal draw_5
+draw5_0:jal draw_5
 	j restore_draw_nut_num
-draw6_0:	jal draw_6
+draw6_0:jal draw_6
 	j restore_draw_nut_num
-draw7_0:	jal draw_7
+draw7_0:jal draw_7
 	j restore_draw_nut_num
-draw8_0:	jal draw_8
+draw8_0:jal draw_8
 	j restore_draw_nut_num
-draw9_0:	jal draw_9
+draw9_0:jal draw_9
 	j restore_draw_nut_num
 restore_draw_nut_num:
 	lw $t0, 0($sp)
@@ -8700,71 +8703,71 @@ draw_row_64:
 	addi $t0, $t0, base_address
 	li $t1, ground
 	
-sw $t1, 0($t0)
-sw $t1, 4($t0)
-sw $t1, 8($t0)
-sw $t1, 12($t0)
-sw $t1, 16($t0)
-sw $t1, 20($t0)
-sw $t1, 24($t0)
-sw $t1, 28($t0)
-sw $t1, 32($t0)
-sw $t1, 36($t0)
-sw $t1, 40($t0)
-sw $t1, 44($t0)
-sw $t1, 48($t0)
-sw $t1, 52($t0)
-sw $t1, 56($t0)
-sw $t1, 60($t0)
-sw $t1, 64($t0)
-sw $t1, 68($t0)
-sw $t1, 72($t0)
-sw $t1, 76($t0)
-sw $t1, 80($t0)
-sw $t1, 84($t0)
-sw $t1, 88($t0)
-sw $t1, 92($t0)
-sw $t1, 96($t0)
-sw $t1, 100($t0)
-sw $t1, 104($t0)
-sw $t1, 108($t0)
-sw $t1, 112($t0)
-sw $t1, 116($t0)
-sw $t1, 120($t0)
-sw $t1, 124($t0)
-sw $t1, 128($t0)
-sw $t1, 132($t0)
-sw $t1, 136($t0)
-sw $t1, 140($t0)
-sw $t1, 144($t0)
-sw $t1, 148($t0)
-sw $t1, 152($t0)
-sw $t1, 156($t0)
-sw $t1, 160($t0)
-sw $t1, 164($t0)
-sw $t1, 168($t0)
-sw $t1, 172($t0)
-sw $t1, 176($t0)
-sw $t1, 180($t0)
-sw $t1, 184($t0)
-sw $t1, 188($t0)
-sw $t1, 192($t0)
-sw $t1, 196($t0)
-sw $t1, 200($t0)
-sw $t1, 204($t0)
-sw $t1, 208($t0)
-sw $t1, 212($t0)
-sw $t1, 216($t0)
-sw $t1, 220($t0)
-sw $t1, 224($t0)
-sw $t1, 228($t0)
-sw $t1, 232($t0)
-sw $t1, 236($t0)
-sw $t1, 240($t0)
-sw $t1, 244($t0)
-sw $t1, 248($t0)
-sw $t1, 252($t0)
-sw $t1, 256($t0)
+	sw $t1, 0($t0)
+	sw $t1, 4($t0)
+	sw $t1, 8($t0)
+	sw $t1, 12($t0)
+	sw $t1, 16($t0)
+	sw $t1, 20($t0)
+	sw $t1, 24($t0)
+	sw $t1, 28($t0)
+	sw $t1, 32($t0)
+	sw $t1, 36($t0)
+	sw $t1, 40($t0)
+	sw $t1, 44($t0)
+	sw $t1, 48($t0)
+	sw $t1, 52($t0)
+	sw $t1, 56($t0)
+	sw $t1, 60($t0)
+	sw $t1, 64($t0)
+	sw $t1, 68($t0)
+	sw $t1, 72($t0)
+	sw $t1, 76($t0)
+	sw $t1, 80($t0)
+	sw $t1, 84($t0)
+	sw $t1, 88($t0)
+	sw $t1, 92($t0)
+	sw $t1, 96($t0)
+	sw $t1, 100($t0)
+	sw $t1, 104($t0)
+	sw $t1, 108($t0)
+	sw $t1, 112($t0)
+	sw $t1, 116($t0)
+	sw $t1, 120($t0)
+	sw $t1, 124($t0)
+	sw $t1, 128($t0)
+	sw $t1, 132($t0)
+	sw $t1, 136($t0)
+	sw $t1, 140($t0)
+	sw $t1, 144($t0)
+	sw $t1, 148($t0)
+	sw $t1, 152($t0)
+	sw $t1, 156($t0)
+	sw $t1, 160($t0)
+	sw $t1, 164($t0)
+	sw $t1, 168($t0)
+	sw $t1, 172($t0)
+	sw $t1, 176($t0)
+	sw $t1, 180($t0)
+	sw $t1, 184($t0)
+	sw $t1, 188($t0)
+	sw $t1, 192($t0)
+	sw $t1, 196($t0)
+	sw $t1, 200($t0)
+	sw $t1, 204($t0)
+	sw $t1, 208($t0)
+	sw $t1, 212($t0)
+	sw $t1, 216($t0)
+	sw $t1, 220($t0)
+	sw $t1, 224($t0)
+	sw $t1, 228($t0)
+	sw $t1, 232($t0)
+	sw $t1, 236($t0)
+	sw $t1, 240($t0)
+	sw $t1, 244($t0)
+	sw $t1, 248($t0)
+	sw $t1, 252($t0)
+	sw $t1, 256($t0)
 	lw $t0,0($sp)
 	lw $t1, 4($sp)
 	addi $sp, $sp, 8
